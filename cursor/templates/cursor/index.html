@@ -6,6 +6,13 @@
 <style>
 .cursor {
     position: absolute;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+}
+.nickname {
+    position: absolute;
+    text-align: center;
 }
 </style>
 {% endblock %}
@@ -24,22 +31,35 @@
 {% block htmlinc %}
 <script>
     let socket;
-    let nickname;
     let cursors = new Map();
+
+    function randomColor() {
+        return "#" + Math.floor(Math.random()*16777215).toString(16);
+    }
 
     class Cursor {
         constructor(id, nickname, position) {
            this.id = id;
            this.nickname = nickname;
            this.position = position;
+           this.cursorEl = $("<div></div>").
+                addClass("cursor").
+                css("background-color", randomColor()).
+                appendTo(document.body);
+           this.nicknameEl = $("<div></div>").
+                addClass("nickname").
+                appendTo(document.body);
         }
 
         updatePosition(position) {
-            console.log(this.nickname, "updating position");
+            this.position = position;
+            this.cursorEl.css({top: this.position.y, left: this.position.x});
+            this.nicknameEl.css({top: this.position.y - 20, left: this.position.x});
         }
 
         updateNickname(nickname) {
-            console.log(this.nickname, "updating nickname");
+            this.nickname = nickname;
+            this.nicknameEl.html(this.nickname);
         }
     }
 
@@ -57,20 +77,21 @@
     });
 
     $("#nickname-input").on("input", function(evt) {
-        nickname = $(this).val();
-        $("#connect-button").prop("disabled", !nickname);
+        $("#connect-button").prop("disabled", !$(this).val());
     });
 
     function onopen(evt) {
         console.log("connected");
         $("#connect-button").prop("disabled", true);
         $("#disconnect-button").prop("disabled", false);
+        $("#nickname-input").prop("disabled", true);
     }
 
     function onclose(evt) {
         console.log("closed connection");
         $("#connect-button").prop("disabled", false);
         $("#disconnect-button").prop("disabled", true);
+        $("#nickname-input").prop("disabled", false);
     }
 
     function onmessage(evt) {
@@ -79,26 +100,22 @@
         if(!cursor) {
             console.log(data);
             cursor = new Cursor(data.id, data.nickname, data.position);
+            cursor.updateNickname(data.nickname);
             cursors.set(data.id, cursor);
         }
 
         switch(data.type) {
             case "cursor.update":
                 cursor.updatePosition(data.position);
-                cursor.updateNickname(data.nickname);
                 break;
             default:
                 console.log("can't handle action type:", data.type);
         }
     }
 
-    function updateCursor(evt) {
-        cursors.set(evt.id, {nickname: evt.nickname, cursor: evt.cursor});
-
-    }
-
     function connect(name) {
         // TODO: pass URL through context
+        const nickname = $("#nickname-input").val();
         socket = new WebSocket(`ws://localhost:8000/cursor/ws/?nickname=${nickname}`)
         socket.onopen = onopen;
         socket.onclose = onclose;
