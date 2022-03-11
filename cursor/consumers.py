@@ -4,9 +4,10 @@ from functools import cached_property
 from urllib.parse import parse_qs
 
 import pydantic
-from asgiref.sync import async_to_sync
 from channels.generic.websocket import AsyncWebsocketConsumer
 from pydantic.json import pydantic_encoder
+
+cursors = {}
 
 
 class Position(pydantic.BaseModel):
@@ -22,6 +23,7 @@ class CursorConsumer(AsyncWebsocketConsumer):
     groups = ("cursor",)
     cursor_id: str
     nickname: str
+    current_position: Position
 
     @cached_property
     def qs(self):
@@ -32,16 +34,42 @@ class CursorConsumer(AsyncWebsocketConsumer):
         """docs here."""
         return self.qs.get("nickname", ("anonymous",))[0]
 
+    async def send_initial_positions(self):
+        """docs here."""
+        await self.send(
+            json.dumps(
+                {
+                    "type": "cursor.initial.data",
+                    "cursors": [
+                        {
+                            "id": cursor.cursor_id,
+                            "nickname": cursor.nickname,
+                            "position": cursor.current_position,
+                        }
+                        for cursor in cursors.values()
+                    ],
+                },
+                default=pydantic_encoder,
+            )
+        )
+
     async def connect(self):
         """docs here."""
         self.cursor_id = str(uuid.uuid4())
         self.nickname = self.get_nickname()
+        self.current_position = Position(x=0, y=0)
+        cursors[self.cursor_id] = self
         await self.accept()
+        await self.send_initial_positions()
+
+    async def disconnect(self, code):
+        """docs here."""
+        del cursors[self.cursor_id]
 
     async def receive(self, text_data: str):
         """docs here."""
         try:
-            position = Position.parse_raw(text_data)
+            self.current_position = Position.parse_raw(text_data)
         except pydantic.ValidationError:
             await self.close(1007)
         else:
@@ -51,7 +79,7 @@ class CursorConsumer(AsyncWebsocketConsumer):
                     "type": "cursor.update",
                     "id": self.cursor_id,
                     "nickname": self.nickname,
-                    "position": position,
+                    "position": self.current_position,
                 },
             )
 

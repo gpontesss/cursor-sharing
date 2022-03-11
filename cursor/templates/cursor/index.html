@@ -37,11 +37,17 @@
         return "#" + Math.floor(Math.random()*16777215).toString(16);
     }
 
+    function initCursor(data) {
+        const cursor = new Cursor(data.id, data.nickname, data.position);
+        cursors.set(cursor.id, cursor);
+        cursor.updateNickname(cursor.nickname);
+        cursor.updatePosition(cursor.position);
+        return cursor;
+    }
+
     class Cursor {
         constructor(id, nickname, position) {
            this.id = id;
-           this.nickname = nickname;
-           this.position = position;
            this.cursorEl = $("<div></div>").
                 addClass("cursor").
                 css("background-color", randomColor()).
@@ -49,12 +55,14 @@
            this.nicknameEl = $("<div></div>").
                 addClass("nickname").
                 appendTo(document.body);
+           this.updateNickname(nickname);
+           this.updatePosition(position);
         }
 
         updatePosition(position) {
             this.position = position;
-            this.cursorEl.css({top: this.position.y, left: this.position.x});
-            this.nicknameEl.css({top: this.position.y - 20, left: this.position.x});
+            this.cursorEl.css({top: this.position.y, left: this.position.x + 10});
+            this.nicknameEl.css({top: this.position.y - 20, left: this.position.x + 10});
         }
 
         updateNickname(nickname) {
@@ -96,17 +104,17 @@
 
     function onmessage(evt) {
         const data = JSON.parse(evt.data);
-        let cursor = cursors.get(data.id);
-        if(!cursor) {
-            console.log(data);
-            cursor = new Cursor(data.id, data.nickname, data.position);
-            cursor.updateNickname(data.nickname);
-            cursors.set(data.id, cursor);
-        }
 
         switch(data.type) {
             case "cursor.update":
+                let cursor = cursors.get(data.id);
+                if(!cursor) {
+                    cursor = initCursor(data);
+                }
                 cursor.updatePosition(data.position);
+                break;
+            case "cursor.initial.data":
+                data.cursors.forEach(initCursor);
                 break;
             default:
                 console.log("can't handle action type:", data.type);
@@ -114,9 +122,9 @@
     }
 
     function connect(name) {
-        // TODO: pass URL through context
         const nickname = $("#nickname-input").val();
-        socket = new WebSocket(`ws://localhost:8000/cursor/ws/?nickname=${nickname}`)
+        const url = `ws://${window.location.host}/cursor/ws/?nickname=${nickname}`;
+        socket = new WebSocket(url);
         socket.onopen = onopen;
         socket.onclose = onclose;
         socket.onmessage = onmessage;
