@@ -1,0 +1,113 @@
+{% extends "base.html" %}
+
+{% block headinc %}
+<script src="https://ajax.googleapis.com/ajax/libs/jquery/3.6.0/jquery.min.js"></script>
+
+<style>
+.cursor {
+    position: absolute;
+}
+</style>
+{% endblock %}
+
+{% block title %}Cursors{% endblock %}
+
+{% block content %}
+<label>
+    Nickname
+    <input id="nickname-input"  />
+</label>
+<button id="connect-button" disabled type="button" onclick="connect()">Connect</button>
+<button id="disconnect-button" disabled type="button" onclick="disconnect()">Disconnect</button>
+{% endblock %}
+
+{% block htmlinc %}
+<script>
+    let socket;
+    let nickname;
+    let cursors = new Map();
+
+    class Cursor {
+        constructor(id, nickname, position) {
+           this.id = id;
+           this.nickname = nickname;
+           this.position = position;
+        }
+
+        updatePosition(position) {
+            console.log(this.nickname, "updating position");
+        }
+
+        updateNickname(nickname) {
+            console.log(this.nickname, "updating nickname");
+        }
+    }
+
+    function requireConn(fn) {
+        return function(...args) {
+            if(socket) {
+                return fn(...args);
+            }
+        };
+    }
+
+    document.onmousemove = requireConn(function(evt) {
+        const cursor = {x: evt.clientX, y: evt.clientY};
+        socket.send(JSON.stringify(cursor));
+    });
+
+    $("#nickname-input").on("input", function(evt) {
+        nickname = $(this).val();
+        $("#connect-button").prop("disabled", !nickname);
+    });
+
+    function onopen(evt) {
+        console.log("connected");
+        $("#connect-button").prop("disabled", true);
+        $("#disconnect-button").prop("disabled", false);
+    }
+
+    function onclose(evt) {
+        console.log("closed connection");
+        $("#connect-button").prop("disabled", false);
+        $("#disconnect-button").prop("disabled", true);
+    }
+
+    function onmessage(evt) {
+        const data = JSON.parse(evt.data);
+        let cursor = cursors.get(data.id);
+        if(!cursor) {
+            console.log(data);
+            cursor = new Cursor(data.id, data.nickname, data.position);
+            cursors.set(data.id, cursor);
+        }
+
+        switch(data.type) {
+            case "cursor.update":
+                cursor.updatePosition(data.position);
+                cursor.updateNickname(data.nickname);
+                break;
+            default:
+                console.log("can't handle action type:", data.type);
+        }
+    }
+
+    function updateCursor(evt) {
+        cursors.set(evt.id, {nickname: evt.nickname, cursor: evt.cursor});
+
+    }
+
+    function connect(name) {
+        // TODO: pass URL through context
+        socket = new WebSocket(`ws://localhost:8000/cursor/ws/?nickname=${nickname}`)
+        socket.onopen = onopen;
+        socket.onclose = onclose;
+        socket.onmessage = onmessage;
+    }
+
+    function disconnect() {
+        socket.close();
+    }
+
+</script>
+{% endblock %}
