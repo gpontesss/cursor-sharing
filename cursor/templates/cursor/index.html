@@ -9,10 +9,14 @@
     width: 10px;
     height: 10px;
     border-radius: 50%;
+    transition-timing-function: linear;
+    transition-duration: 0.5ms;
 }
 .nickname {
     position: absolute;
     text-align: center;
+    transition-timing-function: linear;
+    transition-duration: 0.5ms;
 }
 </style>
 {% endblock %}
@@ -79,9 +83,15 @@
         };
     }
 
+    let minNextUpdate = new Date();
     document.onmousemove = requireConn(function(evt) {
-        const cursor = {x: evt.clientX, y: evt.clientY};
-        socket.send(JSON.stringify(cursor));
+        const now = new Date();
+        if(now >= minNextUpdate) {
+            const cursor = {x: evt.clientX, y: evt.clientY};
+            socket.send(JSON.stringify(cursor));
+            // asures at least 30 FPS
+            minNextUpdate = new Date(now.getTime() + (1000 / 30));
+        }
     });
 
     $("#nickname-input").on("input", function(evt) {
